@@ -360,19 +360,15 @@ class TestVoiceAssistantMessengerIntegration:
     def test_messenger_property_when_set(self):
         with patch("src.agent.Agent.__init__", return_value=None):
             from src.agent import VoiceAssistant
-            from src.config import Config
 
             room = _make_mock_room()
             messenger = ClientMessenger(room)
-            cfg = Config()
-            agent = VoiceAssistant(cfg, messenger=messenger)
+            agent = VoiceAssistant(messenger=messenger)
             assert agent.messenger is messenger
 
     def test_messenger_property_none_by_default(self):
         with patch("src.agent.Agent.__init__", return_value=None):
             from src.agent import VoiceAssistant
-            from src.config import Config
 
-            cfg = Config()
-            agent = VoiceAssistant(cfg)
+            agent = VoiceAssistant()
             assert agent.messenger is None

@@ -1,24 +1,23 @@
 # AI Voice Agent
 
-Production-ready AI Voice Agent built with [LiveKit Agents SDK](https://docs.livekit.io/agents/) (Python). Designed to be deployed on [LiveKit Cloud](https://cloud.livekit.io) (EU region) and connected from any React/Next.js frontend via WebRTC.
+AI Voice Agent built with [LiveKit Agents SDK](https://docs.livekit.io/agents/) (Python). Deploys on [LiveKit Cloud](https://cloud.livekit.io) (EU region), connects from any frontend via WebRTC.
 
 ## Features
 
-- **Configurable STT**: Deepgram (nova-3), OpenAI Whisper
-- **Configurable TTS**: OpenAI (gpt-4o-mini-tts), ElevenLabs (eleven_turbo_v2_5)
-- **Configurable LLM**: OpenAI (GPT-4o), Anthropic (Claude)
+- **STT**: Deepgram (nova-3)
+- **TTS**: OpenAI (gpt-4o-mini-tts)
+- **LLM**: OpenAI (GPT-4o)
 - **Turn detection**: LiveKit Multilingual Turn Detector with interruption support (barge-in)
 - **Client messaging**: Send structured data (RAG results, status, etc.) to the frontend via data channel
-- **Tool calling**: Built-in tools (weather, search, reminders) + webhook-based custom tools
-- **YAML configuration**: Change models, prompts, and tools without code changes
+- **Tool calling**: Built-in tools (weather, search, reminders) + webhook support
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- [LiveKit Cloud](https://cloud.livekit.io) account (free tier: 1.000 Agent-Minuten/Monat)
-- API keys for your chosen providers (OpenAI, Deepgram, etc.)
+- [LiveKit Cloud](https://cloud.livekit.io) account
+- API keys (OpenAI, Deepgram)
 
 ### 1. Install & configure
 
@@ -35,65 +34,39 @@ cp .env.example .env
 ### 2. Run locally (development)
 
 ```bash
-# Download VAD + turn detector models
 python src/agent.py download-files
-
-# Start in dev mode (connects to LiveKit Cloud)
 python src/agent.py dev
 ```
 
 ### 3. Deploy to LiveKit Cloud (EU)
 
 ```bash
-# Install LiveKit CLI
-brew install livekit/tap/lk
-# or: curl -sSL https://get.livekit.io/cli | bash
+brew install livekit/tap/lk  # or: curl -sSL https://get.livekit.io/cli | bash
 
-# Login
 lk cloud auth login
-
-# Create project in EU
 lk cloud project create --name voice-agent --region eu-central
 
-# Set secrets
 lk agent secret set OPENAI_API_KEY sk-...
 lk agent secret set DEEPGRAM_API_KEY ...
-# Optional:
-lk agent secret set ANTHROPIC_API_KEY sk-ant-...
-lk agent secret set ELEVEN_API_KEY ...
 
-# Deploy
 lk agent deploy --region eu-central
 ```
 
-Done. Your agent is now running in the EU on LiveKit Cloud.
-
 ---
 
-## Frontend Integration (React + shadcn/ui)
+## Frontend Integration
 
-Connect to this agent from your existing React/Next.js project.
+Connect to this agent from your existing React project.
 
 ### 1. Install dependencies
 
 ```bash
-pnpm add livekit-client @livekit/components-react @livekit/components-styles livekit-server-sdk
+pnpm add livekit-client @livekit/components-react @livekit/components-styles
 ```
 
-### 2. Install Agents UI components (optional, for beautiful visualizers)
+### 2. Create a token endpoint on your backend
 
-```bash
-# Add the agents-ui registry to your components.json:
-# "registries": { "@agents-ui": "https://livekit.io/ui/r/{name}.json" }
-
-npx shadcn@latest add @agents-ui/agent-audio-visualizer-bar
-npx shadcn@latest add @agents-ui/agent-control-bar
-npx shadcn@latest add @agents-ui/agent-chat-transcript
-```
-
-### 3. Create a token endpoint on your backend
-
-Your backend needs a POST endpoint that generates a LiveKit access token (JWT). The token is a standard JWT signed with your LiveKit API secret. Any language/framework works — here's what the endpoint must do:
+Your backend needs a POST endpoint that generates a LiveKit access token (JWT signed with your LiveKit API secret).
 
 **Request:** `POST /api/livekit-token` (no body required)
 
@@ -107,17 +80,15 @@ Your backend needs a POST endpoint that generates a LiveKit access token (JWT). 
 }
 ```
 
-**How to build the JWT:**
-
-The token is a standard JWT (HS256) signed with your `LIVEKIT_API_SECRET`. The payload must contain:
+**JWT payload** (sign with HS256 using `LIVEKIT_API_SECRET`):
 
 ```json
 {
   "iss": "<LIVEKIT_API_KEY>",
   "sub": "user_1234",
   "name": "User",
-  "exp": <now + 900>,
-  "nbf": <now>,
+  "exp": "<now + 900>",
+  "nbf": "<now>",
   "video": {
     "room": "room_4821",
     "roomJoin": true,
@@ -132,23 +103,13 @@ The token is a standard JWT (HS256) signed with your `LIVEKIT_API_SECRET`. The p
 |-------|-------------|
 | `iss` | Your `LIVEKIT_API_KEY` |
 | `sub` | Unique participant identity (e.g. user ID) |
-| `name` | Display name |
 | `exp` | Expiry (e.g. 15 minutes from now) |
 | `video.room` | Room name (generate a random one per session) |
-| `video.roomJoin` | Must be `true` |
-| `video.canPublish` | Allow publishing audio |
-| `video.canPublishData` | Allow receiving data channel messages (needed for `ClientMessenger`) |
-| `video.canSubscribe` | Allow subscribing to agent audio |
+| `video.canPublishData` | Must be `true` for `ClientMessenger` data channel |
 
-Sign with HS256 using `LIVEKIT_API_SECRET` as the key. Most languages have JWT libraries (e.g. `firebase/php-jwt` for PHP, `pyjwt` for Python, `jsonwebtoken` for Node).
+LiveKit server SDKs (optional higher-level API): PHP (`agence104/livekit-server-sdk`), Python (`livekit-server-sdk`), Node (`livekit-server-sdk`), see [docs.livekit.io/server/generating-tokens](https://docs.livekit.io/server/generating-tokens/).
 
-**LiveKit also provides server SDKs** if you prefer a higher-level API:
-- PHP: `composer require agence104/livekit-server-sdk`
-- Python: `pip install livekit-server-sdk`
-- Node: `npm install livekit-server-sdk`
-- Go / Rust / Ruby: see [docs.livekit.io/server/generating-tokens](https://docs.livekit.io/server/generating-tokens/)
-
-### 4. Create the voice agent component
+### 3. Create the voice agent component
 
 ```tsx
 import { useState, useCallback } from "react";
@@ -167,7 +128,6 @@ interface ConnectionDetails {
   participantToken: string;
 }
 
-// Point this to your backend token endpoint
 const TOKEN_ENDPOINT = "/api/livekit-token";
 
 export function VoiceAgent() {
@@ -219,8 +179,6 @@ function AgentSession() {
   return (
     <div>
       <p>Agent is: {state}</p>
-
-      {/* Audio visualizer */}
       {audioTrack && (
         <BarVisualizer
           state={state}
@@ -229,102 +187,24 @@ function AgentSession() {
           style={{ width: 300, height: 80 }}
         />
       )}
-
-      {/* Disconnect button */}
       <DisconnectButton>End Call</DisconnectButton>
     </div>
   );
 }
 ```
 
-### 5. Use it
-
-```tsx
-import { VoiceAgent } from "@/components/voice-agent";
-
-export default function Page() {
-  return <VoiceAgent />;
-}
-```
-
-That's it. The `useVoiceAssistant` hook from `@livekit/components-react` handles all WebRTC audio streaming, transcript events, and agent state tracking automatically.
-
-### Available hooks & components
-
-| Import | Purpose |
-|--------|---------|
-| `useVoiceAssistant()` | Agent state, audio track, transcript |
-| `BarVisualizer` | Animated audio bars |
-| `RoomAudioRenderer` | Plays agent audio (required) |
-| `DisconnectButton` | End the session |
-| `useConnectionState()` | Connection status |
-| `useTracks()` | Access local/remote audio tracks |
-
-For the full Agents UI component library (visualizers, control bar, chat transcript), see [livekit.io/ui](https://livekit.io/ui).
-
 ---
-
-## Configuration
-
-All agent behavior is configured via `configs/default.yaml`:
-
-### Models
-
-```yaml
-stt:
-  provider: "deepgram"    # or "openai"
-  model: "nova-3"
-  language: "multi"
-
-tts:
-  provider: "openai"      # or "elevenlabs"
-  model: "gpt-4o-mini-tts"
-  voice: "coral"
-
-llm:
-  provider: "openai"      # or "anthropic"
-  model: "gpt-4o"
-  temperature: 0.7
-```
-
-### System Prompt & Greeting
-
-```yaml
-agent:
-  name: "Voice Assistant"
-  system_prompt: |
-    You are a helpful, friendly voice assistant.
-    Be concise and conversational.
-  greeting: "Hello! How can I help you today?"
-```
-
-### Tools
-
-```yaml
-tools:
-  - name: "get_weather"
-    description: "Get current weather for a location"
-    parameters:
-      - name: "location"
-        type: "string"
-        description: "City name"
-        required: true
-    # Optional webhook for external execution:
-    # webhook_url: "https://api.example.com/weather"
-```
 
 ## Client Messaging (Agent → Frontend)
 
-The agent can send structured data messages to the frontend during a session via LiveKit's data channel. This is similar to ElevenLabs' "Client Tools" — use it to push RAG results, status updates, tool outputs, or any custom data to the UI.
+Send structured data from the agent to the frontend during a session via LiveKit's data channel. Use it for RAG results, status updates, tool outputs, or any custom data.
 
 ### Agent-side (Python)
-
-The `ClientMessenger` is available on every `VoiceAssistant` instance via `self.messenger`:
 
 ```python
 # Inside a @function_tool or any agent method:
 
-# Send RAG results with relevance scores
+# RAG results with relevance scores
 await self.messenger.send_rag_result(
     query="company vacation policy",
     chunks=[
@@ -334,26 +214,13 @@ await self.messenger.send_rag_result(
     relevance=0.87,
 )
 
-# Send status / progress updates
+# Status / progress updates
 await self.messenger.send_status("searching", progress=0.5)
 
-# Send any custom message type
-await self.messenger.send("custom_event", {
-    "whatever": "you need",
-    "nested": {"data": True},
-})
-
-# Send only to a specific participant
-await self.messenger.send("private_data", {"x": 1},
-    destination_identities=["user_42"])
-
-# Use LOSSY mode for high-frequency updates (no delivery guarantee)
-from src.messaging import DeliveryMode
-await self.messenger.send("live_indicator", {"level": 0.8},
-    mode=DeliveryMode.LOSSY)
+# Any custom message
+await self.messenger.send("custom_event", {"whatever": "you need"})
 ```
 
-Available convenience methods:
 | Method | Message type | Use case |
 |--------|-------------|----------|
 | `send(type, payload)` | any | Generic — send anything |
@@ -363,8 +230,6 @@ Available convenience methods:
 | `send_error(code, message)` | `error` | Error notifications |
 
 ### Frontend-side (React/TypeScript)
-
-All messages arrive on the LiveKit room's data channel with topic `"agent:message"`. Use the `@livekit/components-react` hook to listen:
 
 ```tsx
 import { useDataChannel } from "@livekit/components-react";
@@ -393,40 +258,7 @@ function useAgentMessages() {
 }
 ```
 
-Then use it in your component:
-
-```tsx
-function AgentSession() {
-  const { state, audioTrack } = useVoiceAssistant();
-  const messages = useAgentMessages();
-
-  // Filter by type
-  const ragResults = messages.filter((m) => m.type === "rag_result");
-  const latestStatus = messages.findLast((m) => m.type === "status");
-
-  return (
-    <div>
-      {/* Show RAG relevance */}
-      {ragResults.map((r, i) => (
-        <div key={i}>
-          <span>Query: {r.payload.query}</span>
-          <span>Relevance: {(r.payload.relevance * 100).toFixed(0)}%</span>
-          {r.payload.chunks.map((chunk: any, j: number) => (
-            <p key={j}>{chunk.text} (score: {chunk.score})</p>
-          ))}
-        </div>
-      ))}
-
-      {/* Show status */}
-      {latestStatus && <p>Agent: {latestStatus.payload.stage}</p>}
-    </div>
-  );
-}
-```
-
 ### Wire format
-
-Every message is a JSON object on topic `"agent:message"`:
 
 ```json
 {
@@ -440,38 +272,21 @@ Every message is a JSON object on topic `"agent:message"`:
 }
 ```
 
+---
+
 ## Project Structure
 
 ```
 ├── src/
-│   ├── agent.py       # Main agent entry point (VoiceAssistant class)
-│   ├── config.py      # YAML config loader (dataclasses)
-│   ├── messaging.py   # Client messaging layer (agent → frontend data channel)
-│   └── tools.py       # Built-in tools + webhook support
-├── configs/
-│   └── default.yaml   # Agent configuration
-├── tests/             # Pytest test suite
-├── pyproject.toml     # Dependencies
-├── Dockerfile         # Container for deployment
-├── .env.example       # Environment template
+│   ├── agent.py       # Agent entry point + VoiceAssistant + tools
+│   └── messaging.py   # Client messaging (agent → frontend data channel)
+├── tests/
+├── .github/workflows/ # CI (pytest on every push)
+├── pyproject.toml
+├── Dockerfile
+├── .env.example
 └── README.md
 ```
-
-## Supported Providers
-
-| Component | Providers |
-|-----------|-----------|
-| STT | Deepgram (nova-3), OpenAI (whisper) |
-| TTS | OpenAI (gpt-4o-mini-tts), ElevenLabs (eleven_turbo_v2_5) |
-| LLM | OpenAI (gpt-4o, gpt-4o-mini), Anthropic (claude-sonnet) |
-| VAD | Silero VAD |
-| Turn Detection | LiveKit Multilingual Model |
-
-## Adding New Providers
-
-1. Install the LiveKit plugin: `pip install livekit-plugins-<provider>`
-2. Add a new branch in the factory function in `src/agent.py`
-3. Update `configs/default.yaml` with the new provider option
 
 ## Testing
 
@@ -484,14 +299,11 @@ pytest -v --cov=src
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `LIVEKIT_URL` | Yes | LiveKit Cloud URL (`wss://...livekit.cloud`) |
+| `LIVEKIT_URL` | Yes | `wss://...livekit.cloud` |
 | `LIVEKIT_API_KEY` | Yes | LiveKit API key |
 | `LIVEKIT_API_SECRET` | Yes | LiveKit API secret |
-| `OPENAI_API_KEY` | If using OpenAI | OpenAI API key |
-| `ANTHROPIC_API_KEY` | If using Anthropic | Anthropic API key |
-| `DEEPGRAM_API_KEY` | If using Deepgram | Deepgram API key |
-| `ELEVEN_API_KEY` | If using ElevenLabs | ElevenLabs API key |
-| `AGENT_CONFIG` | No | Config path (default: `configs/default.yaml`) |
+| `OPENAI_API_KEY` | Yes | OpenAI API key |
+| `DEEPGRAM_API_KEY` | Yes | Deepgram API key |
 
 ## License
 

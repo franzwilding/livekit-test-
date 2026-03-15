@@ -1,15 +1,11 @@
 [project]
 name = "voice-agent"
 version = "1.0.0"
-description = "Production-ready AI Voice Agent with configurable STT, TTS, LLM"
+description = "AI Voice Agent with LiveKit Agents SDK"
 requires-python = ">=3.11"
 dependencies = [
     "livekit-agents[openai,silero,deepgram,turn-detector]~=1.4",
-    "livekit-plugins-elevenlabs~=1.4",
-    "livekit-plugins-anthropic~=1.4",
     "python-dotenv>=1.0.0",
-    "pyyaml>=6.0",
-    "loguru>=0.7.0",
 ]
 
 [project.optional-dependencies]
