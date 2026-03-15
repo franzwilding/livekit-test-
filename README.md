@@ -91,60 +91,64 @@ npx shadcn@latest add @agents-ui/agent-control-bar
 npx shadcn@latest add @agents-ui/agent-chat-transcript
 ```
 
-### 3. Create token endpoint
+### 3. Create token endpoint (PHP)
 
-Your backend needs an API route that generates LiveKit access tokens. This is the only server-side code needed in your frontend project.
+Your backend needs an endpoint that generates LiveKit access tokens. Install the PHP SDK via Composer:
 
-**Next.js App Router** (`app/api/livekit-token/route.ts`):
-
-```typescript
-import { NextResponse } from "next/server";
-import { AccessToken, type VideoGrant } from "livekit-server-sdk";
-
-const API_KEY = process.env.LIVEKIT_API_KEY!;
-const API_SECRET = process.env.LIVEKIT_API_SECRET!;
-const LIVEKIT_URL = process.env.LIVEKIT_URL!;
-
-export async function POST() {
-  const participantIdentity = `user_${Math.floor(Math.random() * 10_000)}`;
-  const roomName = `room_${Math.floor(Math.random() * 10_000)}`;
-
-  const at = new AccessToken(API_KEY, API_SECRET, {
-    identity: participantIdentity,
-    name: "User",
-    ttl: "15m",
-  });
-
-  at.addGrant({
-    room: roomName,
-    roomJoin: true,
-    canPublish: true,
-    canPublishData: true,
-    canSubscribe: true,
-  } as VideoGrant);
-
-  const token = await at.toJwt();
-
-  return NextResponse.json(
-    { serverUrl: LIVEKIT_URL, roomName, participantToken: token },
-    { headers: { "Cache-Control": "no-store" } }
-  );
-}
+```bash
+composer require agence104/livekit-server-sdk
 ```
 
-**Frontend `.env.local`:**
+**`/api/livekit-token.php`:**
 
-```env
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=...
-LIVEKIT_API_SECRET=...
+```php
+<?php
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use Agence104\LiveKit\AccessToken;
+use Agence104\LiveKit\AccessTokenOptions;
+use Agence104\LiveKit\VideoGrant;
+
+$apiKey    = getenv('LIVEKIT_API_KEY');
+$apiSecret = getenv('LIVEKIT_API_SECRET');
+$livekitUrl = getenv('LIVEKIT_URL'); // wss://your-project.livekit.cloud
+
+$participantIdentity = 'user_' . random_int(1000, 9999);
+$roomName = 'room_' . random_int(1000, 9999);
+
+$grant = new VideoGrant();
+$grant->setRoomJoin(true);
+$grant->setRoomName($roomName);
+$grant->setCanPublish(true);
+$grant->setCanPublishData(true);
+$grant->setCanSubscribe(true);
+
+$tokenOptions = (new AccessTokenOptions())
+    ->setIdentity($participantIdentity)
+    ->setName('User')
+    ->setTtl(15 * 60); // 15 minutes
+
+$token = (new AccessToken($apiKey, $apiSecret))
+    ->init($tokenOptions)
+    ->setGrant($grant)
+    ->toJwt();
+
+header('Content-Type: application/json');
+header('Cache-Control: no-store');
+
+echo json_encode([
+    'serverUrl'        => $livekitUrl,
+    'roomName'         => $roomName,
+    'participantToken' => $token,
+]);
 ```
+
+The frontend calls this endpoint to get a token before connecting:
 
 ### 4. Create the voice agent component
 
 ```tsx
-"use client";
-
 import { useState, useCallback } from "react";
 import {
   LiveKitRoom,
@@ -161,6 +165,9 @@ interface ConnectionDetails {
   participantToken: string;
 }
 
+// Point this to your PHP backend
+const TOKEN_ENDPOINT = "/api/livekit-token.php";
+
 export function VoiceAgent() {
   const [connectionDetails, setConnectionDetails] =
     useState<ConnectionDetails | null>(null);
@@ -169,7 +176,7 @@ export function VoiceAgent() {
   const connect = useCallback(async () => {
     setIsConnecting(true);
     try {
-      const res = await fetch("/api/livekit-token", { method: "POST" });
+      const res = await fetch(TOKEN_ENDPOINT, { method: "POST" });
       const details = await res.json();
       setConnectionDetails(details);
     } finally {
