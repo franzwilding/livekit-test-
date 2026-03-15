@@ -315,18 +315,146 @@ emotion:
     sad: "The user seems sad. Be warm and supportive."
 ```
 
+## Client Messaging (Agent → Frontend)
+
+The agent can send structured data messages to the frontend during a session via LiveKit's data channel. This is similar to ElevenLabs' "Client Tools" — use it to push RAG results, status updates, tool outputs, or any custom data to the UI.
+
+### Agent-side (Python)
+
+The `ClientMessenger` is available on every `VoiceAssistant` instance via `self.messenger`:
+
+```python
+# Inside a @function_tool or any agent method:
+
+# Send RAG results with relevance scores
+await self.messenger.send_rag_result(
+    query="company vacation policy",
+    chunks=[
+        {"text": "Employees get 30 days...", "score": 0.95, "source": "hr.pdf"},
+        {"text": "Remote work policy...", "score": 0.62, "source": "handbook.pdf"},
+    ],
+    relevance=0.87,
+)
+
+# Send status / progress updates
+await self.messenger.send_status("searching", progress=0.5)
+
+# Send any custom message type
+await self.messenger.send("custom_event", {
+    "whatever": "you need",
+    "nested": {"data": True},
+})
+
+# Send only to a specific participant
+await self.messenger.send("private_data", {"x": 1},
+    destination_identities=["user_42"])
+
+# Use LOSSY mode for high-frequency updates (no delivery guarantee)
+from src.messaging import DeliveryMode
+await self.messenger.send("live_indicator", {"level": 0.8},
+    mode=DeliveryMode.LOSSY)
+```
+
+Available convenience methods:
+| Method | Message type | Use case |
+|--------|-------------|----------|
+| `send(type, payload)` | any | Generic — send anything |
+| `send_rag_result(query, chunks, relevance)` | `rag_result` | RAG retrieval results |
+| `send_status(stage, progress, detail)` | `status` | Progress / stage updates |
+| `send_tool_result(tool_name, result)` | `tool_result` | Tool output for UI display |
+| `send_error(code, message)` | `error` | Error notifications |
+
+### Frontend-side (React/TypeScript)
+
+All messages arrive on the LiveKit room's data channel with topic `"agent:message"`. Use the `@livekit/components-react` hook to listen:
+
+```tsx
+import { useDataChannel } from "@livekit/components-react";
+import { useCallback, useState } from "react";
+
+interface AgentMessage {
+  type: string;
+  payload: Record<string, any>;
+  timestamp: number;
+}
+
+function useAgentMessages() {
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
+
+  const onMessage = useCallback((msg: { payload: Uint8Array; topic?: string }) => {
+    if (msg.topic !== "agent:message") return;
+    const parsed: AgentMessage = JSON.parse(
+      new TextDecoder().decode(msg.payload)
+    );
+    setMessages((prev) => [...prev, parsed]);
+  }, []);
+
+  useDataChannel("agent:message", onMessage);
+
+  return messages;
+}
+```
+
+Then use it in your component:
+
+```tsx
+function AgentSession() {
+  const { state, audioTrack } = useVoiceAssistant();
+  const messages = useAgentMessages();
+
+  // Filter by type
+  const ragResults = messages.filter((m) => m.type === "rag_result");
+  const latestStatus = messages.findLast((m) => m.type === "status");
+
+  return (
+    <div>
+      {/* Show RAG relevance */}
+      {ragResults.map((r, i) => (
+        <div key={i}>
+          <span>Query: {r.payload.query}</span>
+          <span>Relevance: {(r.payload.relevance * 100).toFixed(0)}%</span>
+          {r.payload.chunks.map((chunk: any, j: number) => (
+            <p key={j}>{chunk.text} (score: {chunk.score})</p>
+          ))}
+        </div>
+      ))}
+
+      {/* Show status */}
+      {latestStatus && <p>Agent: {latestStatus.payload.stage}</p>}
+    </div>
+  );
+}
+```
+
+### Wire format
+
+Every message is a JSON object on topic `"agent:message"`:
+
+```json
+{
+  "type": "rag_result",
+  "payload": {
+    "query": "vacation policy",
+    "chunks": [{"text": "...", "score": 0.95}],
+    "relevance": 0.87
+  },
+  "timestamp": 1710500000.123
+}
+```
+
 ## Project Structure
 
 ```
 ├── src/
 │   ├── agent.py       # Main agent entry point (VoiceAssistant class)
 │   ├── config.py      # YAML config loader (dataclasses)
+│   ├── messaging.py   # Client messaging layer (agent → frontend data channel)
 │   ├── emotion.py     # Emotion detection + adaptive prompts
 │   ├── tools.py       # Built-in tools + webhook support
 │   └── hooks.py       # Pipeline lifecycle hooks
 ├── configs/
 │   └── default.yaml   # Agent configuration
-├── tests/             # Pytest test suite (84 tests)
+├── tests/             # Pytest test suite
 ├── pyproject.toml     # Dependencies
 ├── Dockerfile         # Container for deployment
 ├── .env.example       # Environment template

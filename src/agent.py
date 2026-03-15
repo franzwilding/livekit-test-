@@ -25,6 +25,7 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from src.config import load_config, Config
 from src.emotion import EmotionState, detect_emotion, get_emotion_prompt_addition
 from src.hooks import AgentHooks
+from src.messaging import ClientMessenger
 from src.tools import BUILTIN_TOOLS
 
 logger = logging.getLogger("voice-agent")
@@ -129,11 +130,13 @@ class VoiceAssistant(Agent):
     Extends the LiveKit ``Agent`` base class, adding:
     - Emotion-aware system prompt augmentation via ``AgentHooks``
     - Built-in function tools (weather, web search, reminders)
+    - Client messaging via ``ClientMessenger`` (RAG results, status, etc.)
     - Configurable instructions from YAML
     """
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, messenger: ClientMessenger | None = None) -> None:
         self._cfg = cfg
+        self._messenger = messenger
         self._emotion_state = EmotionState()
         self._hooks = AgentHooks(
             emotion_state=self._emotion_state,
@@ -149,6 +152,11 @@ class VoiceAssistant(Agent):
             )
 
         super().__init__(instructions=instructions)
+
+    @property
+    def messenger(self) -> ClientMessenger | None:
+        """Access the client messenger for sending data to the frontend."""
+        return self._messenger
 
     @function_tool()
     async def get_weather(self, ctx: RunContext, location: str) -> str:
@@ -212,6 +220,9 @@ async def voice_agent_session(ctx: JobContext):
     """
     cfg = config  # Could reload per-session if needed
 
+    # Create the client messenger for this session's room
+    messenger = ClientMessenger(ctx.room)
+
     session = AgentSession(
         stt=create_stt(cfg),
         llm=create_llm(cfg),
@@ -220,7 +231,7 @@ async def voice_agent_session(ctx: JobContext):
         turn_detection=create_turn_detector(cfg),
     )
 
-    agent = VoiceAssistant(cfg)
+    agent = VoiceAssistant(cfg, messenger=messenger)
 
     await session.start(
         agent=agent,
