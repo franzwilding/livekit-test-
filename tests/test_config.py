@@ -9,7 +9,6 @@ import yaml
 from src.config import (
     AgentSettings,
     Config,
-    EmotionSettings,
     LLMSettings,
     STTSettings,
     TTSSettings,
@@ -26,7 +25,6 @@ from src.config import (
 # ---------------------------------------------------------------------------
 
 class TestDefaultConfig:
-    """Verify that a Config() with no YAML loads sensible defaults."""
 
     def test_default_agent_settings(self):
         cfg = Config()
@@ -66,11 +64,6 @@ class TestDefaultConfig:
         assert cfg.turn_detection.type == "multilingual"
         assert cfg.turn_detection.allow_interruptions is True
 
-    def test_default_emotion(self):
-        cfg = Config()
-        assert cfg.emotion.enabled is True
-        assert cfg.emotion.adaptive_prompts == {}
-
     def test_default_tools_empty(self):
         cfg = Config()
         assert cfg.tools == []
@@ -81,10 +74,8 @@ class TestDefaultConfig:
 # ---------------------------------------------------------------------------
 
 class TestLoadConfig:
-    """Test loading configuration from YAML files."""
 
     def _write_yaml(self, data: dict) -> str:
-        """Write a dict to a temporary YAML file and return the path."""
         fd, path = tempfile.mkstemp(suffix=".yaml")
         with os.fdopen(fd, "w") as f:
             yaml.dump(data, f)
@@ -188,20 +179,6 @@ class TestLoadConfig:
         finally:
             os.unlink(path)
 
-    def test_load_emotion_section(self):
-        path = self._write_yaml({
-            "emotion": {
-                "enabled": False,
-                "adaptive_prompts": {"happy": "Be cheerful!"},
-            }
-        })
-        try:
-            cfg = load_config(path)
-            assert cfg.emotion.enabled is False
-            assert cfg.emotion.adaptive_prompts == {"happy": "Be cheerful!"}
-        finally:
-            os.unlink(path)
-
     def test_load_tools_section(self):
         path = self._write_yaml({
             "tools": [
@@ -242,7 +219,6 @@ class TestLoadConfig:
             os.unlink(path)
 
     def test_partial_agent_uses_defaults_for_missing(self):
-        """When only some agent keys are provided, the rest use defaults."""
         path = self._write_yaml({"agent": {"name": "Partial"}})
         try:
             cfg = load_config(path)
@@ -258,13 +234,12 @@ class TestLoadConfig:
 # ---------------------------------------------------------------------------
 
 class TestEnvOverride:
-    """Test that AGENT_CONFIG env var is respected."""
 
     def test_agent_config_env_var(self, tmp_path, monkeypatch):
         config_file = tmp_path / "custom.yaml"
         config_file.write_text(yaml.dump({"agent": {"name": "EnvBot"}}))
         monkeypatch.setenv("AGENT_CONFIG", str(config_file))
-        cfg = load_config()  # no explicit path
+        cfg = load_config()
         assert cfg.agent.name == "EnvBot"
 
 
@@ -273,7 +248,6 @@ class TestEnvOverride:
 # ---------------------------------------------------------------------------
 
 class TestDefaultYAML:
-    """Load the actual default.yaml and verify key values."""
 
     def test_load_default_yaml(self):
         default_path = Path(__file__).parent.parent / "configs" / "default.yaml"
@@ -284,7 +258,6 @@ class TestDefaultYAML:
         assert cfg.stt.provider == "deepgram"
         assert cfg.tts.provider == "openai"
         assert cfg.llm.provider == "openai"
-        assert cfg.emotion.enabled is True
         assert len(cfg.tools) >= 3
         tool_names = [t.name for t in cfg.tools]
         assert "get_weather" in tool_names

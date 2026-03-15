@@ -1,7 +1,7 @@
 """Production-ready AI Voice Agent using LiveKit Agents SDK.
 
 This module is the main entry point for the voice agent. It wires together
-configuration, emotional intelligence, tool support, and the LiveKit Agents
+configuration, tool support, client messaging, and the LiveKit Agents
 VoicePipelineAgent pattern using ``AgentSession`` and the ``Agent`` base class.
 """
 import logging
@@ -23,8 +23,6 @@ from livekit.plugins import anthropic as anthropic_plugin
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from src.config import load_config, Config
-from src.emotion import EmotionState, detect_emotion, get_emotion_prompt_addition
-from src.hooks import AgentHooks
 from src.messaging import ClientMessenger
 from src.tools import BUILTIN_TOOLS
 
@@ -42,17 +40,7 @@ config = load_config()
 # ---------------------------------------------------------------------------
 
 def create_stt(cfg: Config):
-    """Create a Speech-to-Text instance based on config.
-
-    Args:
-        cfg: The loaded agent configuration.
-
-    Returns:
-        An STT plugin instance (Deepgram or OpenAI).
-
-    Raises:
-        ValueError: If the configured provider is not supported.
-    """
+    """Create a Speech-to-Text instance based on config."""
     if cfg.stt.provider == "deepgram":
         return deepgram.STT(model=cfg.stt.model, language=cfg.stt.language)
     elif cfg.stt.provider == "openai":
@@ -61,17 +49,7 @@ def create_stt(cfg: Config):
 
 
 def create_tts(cfg: Config):
-    """Create a Text-to-Speech instance based on config.
-
-    Args:
-        cfg: The loaded agent configuration.
-
-    Returns:
-        A TTS plugin instance (OpenAI or ElevenLabs).
-
-    Raises:
-        ValueError: If the configured provider is not supported.
-    """
+    """Create a Text-to-Speech instance based on config."""
     if cfg.tts.provider == "openai":
         return openai.TTS(model=cfg.tts.model, voice=cfg.tts.voice)
     elif cfg.tts.provider == "elevenlabs":
@@ -88,17 +66,7 @@ def create_tts(cfg: Config):
 
 
 def create_llm(cfg: Config):
-    """Create an LLM instance based on config.
-
-    Args:
-        cfg: The loaded agent configuration.
-
-    Returns:
-        An LLM plugin instance (OpenAI or Anthropic).
-
-    Raises:
-        ValueError: If the configured provider is not supported.
-    """
+    """Create an LLM instance based on config."""
     if cfg.llm.provider == "openai":
         return openai.LLM(model=cfg.llm.model, temperature=cfg.llm.temperature)
     elif cfg.llm.provider == "anthropic":
@@ -107,14 +75,7 @@ def create_llm(cfg: Config):
 
 
 def create_turn_detector(cfg: Config):
-    """Create a turn detector based on config.
-
-    Args:
-        cfg: The loaded agent configuration.
-
-    Returns:
-        A turn detector instance, or ``None`` for silence-based detection.
-    """
+    """Create a turn detector based on config."""
     if cfg.turn_detection.type == "multilingual":
         return MultilingualModel()
     return None
@@ -125,10 +86,9 @@ def create_turn_detector(cfg: Config):
 # ---------------------------------------------------------------------------
 
 class VoiceAssistant(Agent):
-    """Main voice assistant agent with emotional intelligence and tool support.
+    """Main voice assistant agent with tool support and client messaging.
 
     Extends the LiveKit ``Agent`` base class, adding:
-    - Emotion-aware system prompt augmentation via ``AgentHooks``
     - Built-in function tools (weather, web search, reminders)
     - Client messaging via ``ClientMessenger`` (RAG results, status, etc.)
     - Configurable instructions from YAML
@@ -137,21 +97,7 @@ class VoiceAssistant(Agent):
     def __init__(self, cfg: Config, messenger: ClientMessenger | None = None) -> None:
         self._cfg = cfg
         self._messenger = messenger
-        self._emotion_state = EmotionState()
-        self._hooks = AgentHooks(
-            emotion_state=self._emotion_state,
-            adaptive_prompts=cfg.emotion.adaptive_prompts,
-        )
-
-        # Build dynamic instructions with emotion awareness
-        instructions = cfg.agent.system_prompt
-        if cfg.emotion.enabled:
-            instructions += (
-                "\n\nYou have emotional intelligence. Pay attention to the "
-                "user's emotional state and adapt your responses accordingly."
-            )
-
-        super().__init__(instructions=instructions)
+        super().__init__(instructions=cfg.agent.system_prompt)
 
     @property
     def messenger(self) -> ClientMessenger | None:
@@ -213,14 +159,9 @@ server.setup_fnc = prewarm
 
 @server.rtc_session(agent_name=config.agent.name)
 async def voice_agent_session(ctx: JobContext):
-    """Handle an incoming voice agent session.
+    """Handle an incoming voice agent session."""
+    cfg = config
 
-    Creates the pipeline components from configuration, instantiates the
-    ``VoiceAssistant``, starts the session, and sends the initial greeting.
-    """
-    cfg = config  # Could reload per-session if needed
-
-    # Create the client messenger for this session's room
     messenger = ClientMessenger(ctx.room)
 
     session = AgentSession(
@@ -238,7 +179,6 @@ async def voice_agent_session(ctx: JobContext):
         room=ctx.room,
     )
 
-    # Send greeting
     if cfg.agent.greeting:
         await session.generate_reply(
             instructions=f"Greet the user by saying: {cfg.agent.greeting}"

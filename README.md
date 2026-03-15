@@ -8,7 +8,7 @@ Production-ready AI Voice Agent built with [LiveKit Agents SDK](https://docs.liv
 - **Configurable TTS**: OpenAI (gpt-4o-mini-tts), ElevenLabs (eleven_turbo_v2_5)
 - **Configurable LLM**: OpenAI (GPT-4o), Anthropic (Claude)
 - **Turn detection**: LiveKit Multilingual Turn Detector with interruption support (barge-in)
-- **Emotional intelligence**: Keyword-based emotion detection with adaptive prompts
+- **Client messaging**: Send structured data (RAG results, status, etc.) to the frontend via data channel
 - **Tool calling**: Built-in tools (weather, search, reminders) + webhook-based custom tools
 - **YAML configuration**: Change models, prompts, and tools without code changes
 
@@ -91,60 +91,62 @@ npx shadcn@latest add @agents-ui/agent-control-bar
 npx shadcn@latest add @agents-ui/agent-chat-transcript
 ```
 
-### 3. Create token endpoint (PHP)
+### 3. Create a token endpoint on your backend
 
-Your backend needs an endpoint that generates LiveKit access tokens. Install the PHP SDK via Composer:
+Your backend needs a POST endpoint that generates a LiveKit access token (JWT). The token is a standard JWT signed with your LiveKit API secret. Any language/framework works — here's what the endpoint must do:
 
-```bash
-composer require agence104/livekit-server-sdk
+**Request:** `POST /api/livekit-token` (no body required)
+
+**Response:** `application/json`
+
+```json
+{
+  "serverUrl": "wss://your-project.livekit.cloud",
+  "roomName": "room_4821",
+  "participantToken": "<JWT>"
+}
 ```
 
-**`/api/livekit-token.php`:**
+**How to build the JWT:**
 
-```php
-<?php
+The token is a standard JWT (HS256) signed with your `LIVEKIT_API_SECRET`. The payload must contain:
 
-require_once __DIR__ . '/../vendor/autoload.php';
-
-use Agence104\LiveKit\AccessToken;
-use Agence104\LiveKit\AccessTokenOptions;
-use Agence104\LiveKit\VideoGrant;
-
-$apiKey    = getenv('LIVEKIT_API_KEY');
-$apiSecret = getenv('LIVEKIT_API_SECRET');
-$livekitUrl = getenv('LIVEKIT_URL'); // wss://your-project.livekit.cloud
-
-$participantIdentity = 'user_' . random_int(1000, 9999);
-$roomName = 'room_' . random_int(1000, 9999);
-
-$grant = new VideoGrant();
-$grant->setRoomJoin(true);
-$grant->setRoomName($roomName);
-$grant->setCanPublish(true);
-$grant->setCanPublishData(true);
-$grant->setCanSubscribe(true);
-
-$tokenOptions = (new AccessTokenOptions())
-    ->setIdentity($participantIdentity)
-    ->setName('User')
-    ->setTtl(15 * 60); // 15 minutes
-
-$token = (new AccessToken($apiKey, $apiSecret))
-    ->init($tokenOptions)
-    ->setGrant($grant)
-    ->toJwt();
-
-header('Content-Type: application/json');
-header('Cache-Control: no-store');
-
-echo json_encode([
-    'serverUrl'        => $livekitUrl,
-    'roomName'         => $roomName,
-    'participantToken' => $token,
-]);
+```json
+{
+  "iss": "<LIVEKIT_API_KEY>",
+  "sub": "user_1234",
+  "name": "User",
+  "exp": <now + 900>,
+  "nbf": <now>,
+  "video": {
+    "room": "room_4821",
+    "roomJoin": true,
+    "canPublish": true,
+    "canPublishData": true,
+    "canSubscribe": true
+  }
+}
 ```
 
-The frontend calls this endpoint to get a token before connecting:
+| Field | Description |
+|-------|-------------|
+| `iss` | Your `LIVEKIT_API_KEY` |
+| `sub` | Unique participant identity (e.g. user ID) |
+| `name` | Display name |
+| `exp` | Expiry (e.g. 15 minutes from now) |
+| `video.room` | Room name (generate a random one per session) |
+| `video.roomJoin` | Must be `true` |
+| `video.canPublish` | Allow publishing audio |
+| `video.canPublishData` | Allow receiving data channel messages (needed for `ClientMessenger`) |
+| `video.canSubscribe` | Allow subscribing to agent audio |
+
+Sign with HS256 using `LIVEKIT_API_SECRET` as the key. Most languages have JWT libraries (e.g. `firebase/php-jwt` for PHP, `pyjwt` for Python, `jsonwebtoken` for Node).
+
+**LiveKit also provides server SDKs** if you prefer a higher-level API:
+- PHP: `composer require agence104/livekit-server-sdk`
+- Python: `pip install livekit-server-sdk`
+- Node: `npm install livekit-server-sdk`
+- Go / Rust / Ruby: see [docs.livekit.io/server/generating-tokens](https://docs.livekit.io/server/generating-tokens/)
 
 ### 4. Create the voice agent component
 
@@ -165,8 +167,8 @@ interface ConnectionDetails {
   participantToken: string;
 }
 
-// Point this to your PHP backend
-const TOKEN_ENDPOINT = "/api/livekit-token.php";
+// Point this to your backend token endpoint
+const TOKEN_ENDPOINT = "/api/livekit-token";
 
 export function VoiceAgent() {
   const [connectionDetails, setConnectionDetails] =
@@ -311,17 +313,6 @@ tools:
     # webhook_url: "https://api.example.com/weather"
 ```
 
-### Emotional Intelligence
-
-```yaml
-emotion:
-  enabled: true
-  adaptive_prompts:
-    frustrated: "The user seems frustrated. Be extra patient."
-    happy: "The user is in a good mood. Match their energy."
-    sad: "The user seems sad. Be warm and supportive."
-```
-
 ## Client Messaging (Agent → Frontend)
 
 The agent can send structured data messages to the frontend during a session via LiveKit's data channel. This is similar to ElevenLabs' "Client Tools" — use it to push RAG results, status updates, tool outputs, or any custom data to the UI.
@@ -456,9 +447,7 @@ Every message is a JSON object on topic `"agent:message"`:
 │   ├── agent.py       # Main agent entry point (VoiceAssistant class)
 │   ├── config.py      # YAML config loader (dataclasses)
 │   ├── messaging.py   # Client messaging layer (agent → frontend data channel)
-│   ├── emotion.py     # Emotion detection + adaptive prompts
-│   ├── tools.py       # Built-in tools + webhook support
-│   └── hooks.py       # Pipeline lifecycle hooks
+│   └── tools.py       # Built-in tools + webhook support
 ├── configs/
 │   └── default.yaml   # Agent configuration
 ├── tests/             # Pytest test suite

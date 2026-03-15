@@ -54,12 +54,6 @@ class TurnDetectionSettings:
 
 
 @dataclass
-class EmotionSettings:
-    enabled: bool = True
-    adaptive_prompts: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
 class ToolParameter:
     name: str
     type: str = "string"
@@ -83,7 +77,6 @@ class Config:
     llm: LLMSettings = field(default_factory=LLMSettings)
     vad: VADSettings = field(default_factory=VADSettings)
     turn_detection: TurnDetectionSettings = field(default_factory=TurnDetectionSettings)
-    emotion: EmotionSettings = field(default_factory=EmotionSettings)
     tools: list[ToolConfig] = field(default_factory=list)
 
 
@@ -165,14 +158,6 @@ def load_config(config_path: str | None = None) -> Config:
             allow_interruptions=td.get(
                 "allow_interruptions", config.turn_detection.allow_interruptions
             ),
-        )
-
-    # Parse emotion
-    if "emotion" in data:
-        e = data["emotion"]
-        config.emotion = EmotionSettings(
-            enabled=e.get("enabled", config.emotion.enabled),
-            adaptive_prompts=e.get("adaptive_prompts", {}),
         )
 
     # Parse tools

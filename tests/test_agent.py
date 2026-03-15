@@ -18,7 +18,6 @@ from src.config import Config, load_config, STTSettings, TTSSettings, LLMSetting
 # ---------------------------------------------------------------------------
 
 class TestCreateSTT:
-    """Test the STT factory function."""
 
     def test_deepgram_provider(self):
         with patch("src.agent.deepgram") as mock_dg:
@@ -48,7 +47,6 @@ class TestCreateSTT:
 
 
 class TestCreateTTS:
-    """Test the TTS factory function."""
 
     def test_openai_provider(self):
         with patch("src.agent.openai") as mock_oai:
@@ -88,7 +86,6 @@ class TestCreateTTS:
             )
             create_tts(cfg)
             mock_el.TTS.assert_called_once()
-            # The Voice should be created with id= when voice_id is provided
             mock_el.Voice.assert_called_with(id="abc123")
 
     def test_unknown_provider_raises(self):
@@ -101,7 +98,6 @@ class TestCreateTTS:
 
 
 class TestCreateLLM:
-    """Test the LLM factory function."""
 
     def test_openai_provider(self):
         with patch("src.agent.openai") as mock_oai:
@@ -131,7 +127,6 @@ class TestCreateLLM:
 
 
 class TestCreateTurnDetector:
-    """Test the turn detector factory function."""
 
     def test_multilingual_returns_model(self):
         with patch("src.agent.MultilingualModel") as mock_mm:
@@ -139,7 +134,7 @@ class TestCreateTurnDetector:
 
             cfg = Config()
             cfg.turn_detection = TurnDetectionSettings(type="multilingual")
-            result = create_turn_detector(cfg)
+            create_turn_detector(cfg)
             mock_mm.assert_called_once()
 
     def test_silence_returns_none(self):
@@ -156,7 +151,6 @@ class TestCreateTurnDetector:
 # ---------------------------------------------------------------------------
 
 class TestVoiceAssistant:
-    """Test VoiceAssistant instantiation and configuration."""
 
     def test_creates_with_default_config(self):
         with patch("src.agent.Agent.__init__", return_value=None):
@@ -165,46 +159,31 @@ class TestVoiceAssistant:
             cfg = Config()
             agent = VoiceAssistant(cfg)
             assert agent._cfg is cfg
-            assert agent._emotion_state is not None
-            assert agent._emotion_state.current_emotion == "neutral"
 
-    def test_emotion_disabled_no_extra_instructions(self):
+    def test_system_prompt_passed_to_agent(self):
         with patch("src.agent.Agent.__init__", return_value=None) as mock_init:
             from src.agent import VoiceAssistant
-            from src.config import EmotionSettings
 
             cfg = Config()
-            cfg.emotion = EmotionSettings(enabled=False)
-            cfg.agent.system_prompt = "Be helpful."
-            agent = VoiceAssistant(cfg)
-            # The Agent.__init__ should have been called with instructions
+            cfg.agent.system_prompt = "Be helpful and concise."
+            VoiceAssistant(cfg)
             call_kwargs = mock_init.call_args
-            instructions = call_kwargs.kwargs.get("instructions", "")
-            assert "emotional intelligence" not in instructions.lower()
+            assert call_kwargs.kwargs["instructions"] == "Be helpful and concise."
 
-    def test_emotion_enabled_adds_instructions(self):
-        with patch("src.agent.Agent.__init__", return_value=None) as mock_init:
-            from src.agent import VoiceAssistant
-            from src.config import EmotionSettings
-
-            cfg = Config()
-            cfg.emotion = EmotionSettings(enabled=True)
-            cfg.agent.system_prompt = "Be helpful."
-            agent = VoiceAssistant(cfg)
-            call_kwargs = mock_init.call_args
-            instructions = call_kwargs.kwargs.get("instructions", "")
-            assert "emotional intelligence" in instructions.lower()
-
-    def test_hooks_initialized_with_adaptive_prompts(self):
+    def test_messenger_property_when_set(self):
         with patch("src.agent.Agent.__init__", return_value=None):
             from src.agent import VoiceAssistant
-            from src.config import EmotionSettings
-
-            custom_prompts = {"happy": "Be very cheerful!"}
+            messenger = MagicMock()
             cfg = Config()
-            cfg.emotion = EmotionSettings(enabled=True, adaptive_prompts=custom_prompts)
+            agent = VoiceAssistant(cfg, messenger=messenger)
+            assert agent.messenger is messenger
+
+    def test_messenger_none_by_default(self):
+        with patch("src.agent.Agent.__init__", return_value=None):
+            from src.agent import VoiceAssistant
+            cfg = Config()
             agent = VoiceAssistant(cfg)
-            assert agent._hooks.adaptive_prompts == custom_prompts
+            assert agent.messenger is None
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +191,6 @@ class TestVoiceAssistant:
 # ---------------------------------------------------------------------------
 
 class TestConfigToAgentWiring:
-    """End-to-end tests from YAML config to agent factory outputs."""
 
     def _write_yaml(self, data: dict) -> str:
         fd, path = tempfile.mkstemp(suffix=".yaml")
@@ -221,7 +199,6 @@ class TestConfigToAgentWiring:
         return path
 
     def test_full_config_creates_all_providers(self):
-        """Verify a complete config can drive all factory functions."""
         path = self._write_yaml({
             "agent": {"name": "IntegrationBot"},
             "stt": {"provider": "deepgram", "model": "nova-3", "language": "en"},
@@ -249,7 +226,7 @@ class TestConfigToAgentWiring:
                 mock_oai.LLM.assert_called_once()
 
             from src.agent import create_turn_detector
-            assert create_turn_detector(cfg) is None  # silence type
+            assert create_turn_detector(cfg) is None
         finally:
             os.unlink(path)
 

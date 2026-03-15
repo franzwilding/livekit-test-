@@ -42,17 +42,6 @@ turn_detection:
   type: "multilingual"  # multilingual, silence
   allow_interruptions: true
 
-# Emotional intelligence
-emotion:
-  enabled: true
-  # Emotion-adaptive system prompt additions
-  adaptive_prompts:
-    frustrated: "The user seems frustrated. Be extra patient and empathetic."
-    confused: "The user seems confused. Simplify your explanations."
-    happy: "The user is in a good mood. Match their positive energy."
-    sad: "The user seems sad. Be warm and supportive."
-    angry: "The user seems angry. Stay calm, acknowledge their feelings."
-
 # Tools the agent can use
 tools:
   - name: "get_weather"
