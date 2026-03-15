@@ -1,0 +1,85 @@
+agent:
+  name: "Voice Assistant"
+  # System prompt for the LLM
+  system_prompt: |
+    You are a helpful, friendly voice assistant. Be concise and conversational.
+    Respond naturally as if speaking to a friend. Keep responses under 3 sentences
+    unless asked for detail. Use simple language suitable for speech.
+  # Greeting spoken when user connects
+  greeting: "Hello! How can I help you today?"
+  # Max conversation history messages
+  max_history: 50
+
+# Speech-to-Text configuration
+stt:
+  provider: "deepgram"  # deepgram, openai
+  model: "nova-3"
+  language: "multi"
+
+# Text-to-Speech configuration
+tts:
+  provider: "openai"  # openai, elevenlabs
+  model: "gpt-4o-mini-tts"
+  voice: "coral"
+  # ElevenLabs-specific options
+  elevenlabs_voice_id: ""
+  elevenlabs_model: "eleven_turbo_v2_5"
+
+# LLM configuration
+llm:
+  provider: "openai"  # openai, anthropic
+  model: "gpt-4o"
+  temperature: 0.7
+
+# Voice Activity Detection
+vad:
+  threshold: 0.5
+  min_silence_ms: 600
+  min_speech_ms: 250
+
+# Turn detection
+turn_detection:
+  type: "multilingual"  # multilingual, silence
+  allow_interruptions: true
+
+# Emotional intelligence
+emotion:
+  enabled: true
+  # Emotion-adaptive system prompt additions
+  adaptive_prompts:
+    frustrated: "The user seems frustrated. Be extra patient and empathetic."
+    confused: "The user seems confused. Simplify your explanations."
+    happy: "The user is in a good mood. Match their positive energy."
+    sad: "The user seems sad. Be warm and supportive."
+    angry: "The user seems angry. Stay calm, acknowledge their feelings."
+
+# Tools the agent can use
+tools:
+  - name: "get_weather"
+    description: "Get current weather for a location"
+    parameters:
+      - name: "location"
+        type: "string"
+        description: "City name or address"
+        required: true
+    # webhook_url: "https://api.example.com/weather"  # Optional webhook
+
+  - name: "search_web"
+    description: "Search the web for information"
+    parameters:
+      - name: "query"
+        type: "string"
+        description: "Search query"
+        required: true
+
+  - name: "set_reminder"
+    description: "Set a reminder for the user"
+    parameters:
+      - name: "message"
+        type: "string"
+        description: "Reminder message"
+        required: true
+      - name: "time"
+        type: "string"
+        description: "When to remind (e.g., 'in 5 minutes', 'tomorrow at 9am')"
+        required: true
